@@ -111,6 +111,21 @@ public final class ClasspathExporter {
    */
   private String[] remainingCommandLineArguments;
 
+  /**
+   * A {@link List} of {@link Dependency} instances that were either
+   * {@linkplain #setDependencies(List) explicitly set} or {@linkplain
+   * #produceDependencies(CommandLine) computed}.
+   *
+   * <p>This field may be {@code null}.</p>
+   *
+   * @see #getDependencies()
+   *
+   * @see #setDependencies(List)
+   *
+   * @see #produceDependencies(CommandLine)
+   */
+  private List<Dependency> dependencies;
+
 
   /*
    * Constructors.
@@ -137,7 +152,10 @@ public final class ClasspathExporter {
    * target="_parent">producer method</a> that {@linkplain Produces
    * produces} an {@link ApplicationScoped application-scoped} {@link
    * List} of {@link Dependency} instances that represent Maven-style
-   * artifact coordinates.
+   * artifact coordinates from either {@linkplain
+   * #setDependencies(List) explicitly-set <code>Dependency</code>
+   * instances} or {@linkplain CommandLine command-line arguments} or
+   * system properties.
    *
    * <p>This method never returns {@code null}.</p>
    *
@@ -147,133 +165,193 @@ public final class ClasspathExporter {
    *
    * @return a non-{@code null} {@link List} of {@link Dependency}
    * instances
+   *
+   * @see #setDependencies(List)
+   *
+   * @see #getDependencies()
    */
   @Produces
   @ApplicationScoped
-  private final List<Dependency> produceDependencies(final CommandLine commandLine) {
-    final List<Dependency> returnValue = new ArrayList<>();
-    if (commandLine != null) {
-      final String[] artifactPath;
-      if (commandLine.hasOption("artifactPath")) {
-        artifactPath = commandLine.getOptionValues("artifactPath");
-      } else {
-        final String artifactPathSystemProperty = System.getProperty("maven.artifact.path");
-        if (artifactPathSystemProperty == null) {
-          artifactPath = new String[0];
+  public final List<Dependency> produceDependencies(final CommandLine commandLine) {
+    final List<Dependency> returnValue;
+    List<Dependency> dependencies = this.getDependencies();
+    if (dependencies == null) {
+      returnValue = new ArrayList<>();
+      if (commandLine != null) {
+        final String[] artifactPath;
+        if (commandLine.hasOption("artifactPath")) {
+          artifactPath = commandLine.getOptionValues("artifactPath");
         } else {
-          artifactPath = new String[] { artifactPathSystemProperty };
+          final String artifactPathSystemProperty = System.getProperty("maven.artifact.path");
+          if (artifactPathSystemProperty == null) {
+            artifactPath = new String[0];
+          } else {
+            artifactPath = new String[] { artifactPathSystemProperty };
+          }
+        }
+        if (artifactPath != null) {
+          Arrays.stream(artifactPath)
+            .flatMap(item -> Arrays.stream(item.split("[, ]+")))
+            .forEach(gav -> {
+                if (gav != null) {
+                  final String[] components = gav.split(":");
+                  assert components != null;
+                  assert components.length > 0;
+                  String groupId = null;
+                  String artifactId = null;
+                  String version = null;
+                  String classifier = null;
+                  String packaging = null;
+                  String scope = null;
+                  switch (components.length) {
+                  case 1:
+                    // artifact
+                    groupId = null; // will be set to default later
+                    artifactId = components[0];
+                    version = "LATEST";
+                    packaging = "jar";
+                    scope = JavaScopes.COMPILE;
+                    break;
+                  case 2:
+                    // group:artifact or artifact:version
+                    final String firstComponent = components[0];
+                    assert firstComponent != null;
+                    final String secondComponent = components[1];
+                    assert secondComponent != null;
+                    if (secondComponent.isEmpty()) {
+                      throw new IllegalArgumentException("Unrecognized artifact coordinates: " + gav);
+                    } else if (Character.isDigit(secondComponent.charAt(0))) {
+                      // artifact:version
+                      groupId = null; // will default below
+                      artifactId = firstComponent;
+                      version = secondComponent;
+                    } else {
+                      // group:artifact
+                      groupId = firstComponent;
+                      artifactId = secondComponent;
+                      version = "LATEST";
+                    }
+                    packaging = "jar";
+                    scope = JavaScopes.COMPILE;
+                    break;
+                  case 3:
+                    // group:artifact:version
+                    groupId = components[0];
+                    artifactId = components[1];
+                    version = components[2];
+                    packaging = "jar";
+                    scope = JavaScopes.COMPILE;
+                    break;
+                  case 4:
+                    // group:artifact:version:packaging
+                    groupId = components[0];
+                    artifactId = components[1];
+                    version = components[2];
+                    packaging = components[3];
+                    scope = JavaScopes.COMPILE;
+                    break;
+                  case 5:
+                    // group:artifact:version:packaging:classifier
+                    groupId = components[0];
+                    artifactId = components[1];
+                    version = components[2];
+                    packaging = components[3];
+                    classifier = components[4];
+                    scope = JavaScopes.COMPILE;
+                    break;
+                  case 6:
+                    // group:artifact:version:packaging:classifier:scope
+                    groupId = components[0];
+                    artifactId = components[1];
+                    version = components[2];
+                    packaging = components[3];
+                    classifier = components[4];
+                    scope = components[5];
+                    break;
+                  default:
+                    throw new IllegalArgumentException("Unrecognized artifact coordinates: " + gav);
+                  }
+                  if (groupId == null || groupId.isEmpty()) {
+                    groupId = commandLine.getOptionValue("defaultGroupId");
+                  }
+                  if (groupId == null || groupId.isEmpty() ||
+                      artifactId == null || artifactId.isEmpty()) {
+                    throw new IllegalArgumentException("Unrecognized artifact coordinates: " + gav);
+                  }
+                  if (version == null || version.isEmpty()) {
+                    version = "LATEST";
+                  }
+                  // note: classifier can be null
+                  if (packaging == null || packaging.isEmpty()) {
+                    packaging = "jar";
+                  }
+                  if (scope == null || scope.isEmpty()) {
+                    scope = JavaScopes.COMPILE;
+                  }
+                  assert scope != null;
+                  returnValue.add(new Dependency(new DefaultArtifact(groupId, artifactId, classifier, packaging, version), scope));
+                }
+              });
         }
       }
-      if (artifactPath != null) {
-        Arrays.stream(artifactPath)
-          .flatMap(item -> Arrays.stream(item.split("[, ]+")))
-          .forEach(gav -> {
-            if (gav != null) {
-              final String[] components = gav.split(":");
-              assert components != null;
-              assert components.length > 0;
-              String groupId = null;
-              String artifactId = null;
-              String version = null;
-              String classifier = null;
-              String packaging = null;
-              String scope = null;
-              switch (components.length) {
-              case 1:
-                // artifact
-                groupId = null; // will be set to default later
-                artifactId = components[0];
-                version = "LATEST";
-                packaging = "jar";
-                scope = JavaScopes.COMPILE;
-                break;
-              case 2:
-                // group:artifact or artifact:version
-                final String firstComponent = components[0];
-                assert firstComponent != null;
-                final String secondComponent = components[1];
-                assert secondComponent != null;
-                if (secondComponent.isEmpty()) {
-                  throw new IllegalArgumentException("Unrecognized artifact coordinates: " + gav);
-                } else if (Character.isDigit(secondComponent.charAt(0))) {
-                  // artifact:version
-                  groupId = null; // will default below
-                  artifactId = firstComponent;
-                  version = secondComponent;
-                } else {
-                  // group:artifact
-                  groupId = firstComponent;
-                  artifactId = secondComponent;
-                  version = "LATEST";
-                }
-                packaging = "jar";
-                scope = JavaScopes.COMPILE;
-                break;
-              case 3:
-                // group:artifact:version
-                groupId = components[0];
-                artifactId = components[1];
-                version = components[2];
-                packaging = "jar";
-                scope = JavaScopes.COMPILE;
-                break;
-              case 4:
-                // group:artifact:version:packaging
-                groupId = components[0];
-                artifactId = components[1];
-                version = components[2];
-                packaging = components[3];
-                scope = JavaScopes.COMPILE;
-                break;
-              case 5:
-                // group:artifact:version:packaging:classifier
-                groupId = components[0];
-                artifactId = components[1];
-                version = components[2];
-                packaging = components[3];
-                classifier = components[4];
-                scope = JavaScopes.COMPILE;
-                break;
-              case 6:
-                // group:artifact:version:packaging:classifier:scope
-                groupId = components[0];
-                artifactId = components[1];
-                version = components[2];
-                packaging = components[3];
-                classifier = components[4];
-                scope = components[5];
-                break;
-              default:
-                throw new IllegalArgumentException("Unrecognized artifact coordinates: " + gav);
-              }
-              if (groupId == null || groupId.isEmpty()) {
-                groupId = commandLine.getOptionValue("defaultGroupId");
-              }
-              if (groupId == null || groupId.isEmpty() ||
-                  artifactId == null || artifactId.isEmpty()) {
-                throw new IllegalArgumentException("Unrecognized artifact coordinates: " + gav);
-              }
-              if (version == null || version.isEmpty()) {
-                version = "LATEST";
-              }
-              // note: classifier can be null
-              if (packaging == null || packaging.isEmpty()) {
-                packaging = "jar";
-              }
-              if (scope == null || scope.isEmpty()) {
-                scope = JavaScopes.COMPILE;
-              }
-              assert scope != null;
-              returnValue.add(new Dependency(new DefaultArtifact(groupId, artifactId, classifier, packaging, version), scope));
-            }
-          });
-      }
       this.remainingCommandLineArguments = commandLine.getArgs();
+      this.dependencies = returnValue;
+    } else {
+      returnValue = dependencies;
     }
     if (returnValue == null || returnValue.isEmpty()) {
       return Collections.emptyList();
     } else {
       return Collections.unmodifiableList(returnValue);
+    }
+  }
+
+  /**
+   * Returns the {@link List} of {@link Dependency} instances that
+   * will be used by this class to compute the eventual classpath
+   * returned by the {@link #getClasspath()} method.
+   *
+   * <p>This method may return {@code null}.</p>
+   *
+   * @return a {@link List} of {@link Dependency} instances, or {@code
+   * null}
+   *
+   * @see #setDependencies(List)
+   */
+  public final List<Dependency> getDependencies() {
+    final List<Dependency> returnValue;
+    if (this.dependencies == null) {
+      returnValue = null;
+    } else if (this.dependencies.isEmpty()) {
+      returnValue = Collections.emptyList();
+    } else {
+      returnValue = Collections.unmodifiableList(this.dependencies);
+    }
+    return returnValue;
+  }
+  
+  /**
+   * Sets the {@link List} of {@link Dependency} instances that will
+   * be used by this {@link ClasspathExporter} to compute the
+   * classpath returned by the {@link #getClasspath()} method.
+   *
+   * <p><strong>Users of this class should not feel obligated to call
+   * this method.</strong> If this method is not explicitly called,
+   * this class will infer the list of dependencies from command line
+   * arguments and system properties.</p>
+   *
+   * @param dependencies a {@link List} of {@link Dependency}
+   * instances; may be {@code null}
+   *
+   * @see #getDependencies()
+   *
+   * @see #getClasspath()
+   */
+  public final void setDependencies(final List<Dependency> dependencies) {
+    if (dependencies == null || dependencies.isEmpty()) {
+      this.dependencies = Collections.emptyList();
+    } else {
+      this.dependencies = new ArrayList<>(dependencies);
     }
   }
 
