@@ -293,8 +293,8 @@ public final class ClasspathExporter {
                 }
               });
         }
+        this.remainingCommandLineArguments = commandLine.getArgs();
       }
-      this.remainingCommandLineArguments = commandLine.getArgs();
       this.dependencies = returnValue;
     } else {
       returnValue = dependencies;
