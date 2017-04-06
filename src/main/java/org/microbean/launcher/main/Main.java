@@ -21,6 +21,8 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 
+import java.security.PrivilegedAction;
+
 import java.util.HashSet;
 import java.util.Set;
 
@@ -33,8 +35,39 @@ import javax.enterprise.inject.se.SeContainerInitializer;
 
 import javax.inject.Provider;
 
+import static java.security.AccessController.doPrivileged;
+
+/**
+ * A class whose {@link #main(String[])} method can be used to
+ * {@linkplain SeContainerInitializer#initialize() start a CDI
+ * application} given a collection of Maven Central artifact
+ * coordinates.
+ *
+ * @author <a href="https://about.me/lairdnelson"
+ * target="_parent">Laird Nelson</a>
+ *
+ * @see #main(SeContainerInitializer, SeContainerInitializer, String[])
+ *
+ * @see ClasspathExporter
+ */
 public class Main {
 
+
+  /*
+   * Constructors.
+   */
+
+  
+  private Main() {
+    super();
+  }
+
+
+  /*
+   * Static methods.
+   */
+  
+  
   public static final void main(final String[] commandLineArguments) throws MalformedURLException {
     main(null, null, commandLineArguments);
   }
@@ -64,7 +97,7 @@ public class Main {
       for (final URI uri : classpathAdditions) {
         urls[i++] = uri.toURL();
       }
-      urlClassLoader = new URLClassLoader(urls, contextClassLoader);
+      urlClassLoader = doPrivileged((PrivilegedAction<URLClassLoader>)() -> new URLClassLoader(urls, contextClassLoader));
       initializer.setClassLoader(urlClassLoader);
     }
     

@@ -91,8 +91,6 @@ public class TestMain {
    *
    * @param event the event representing the CDI container startup;
    * ignored
-   *
-   * @param args the command line arguments
    */
   private final void onStartup(@Observes @Initialized(ApplicationScoped.class) final Object event) {
 
@@ -101,7 +99,7 @@ public class TestMain {
   @Test
   public void testClasspathResolution() throws MalformedURLException {
     final int oldInstanceCount = instanceCount;
-    Main.main(new String[] { "--defaultGroupId", "org.microbean", "--artifactPath", "microbean-configuration-cdi:0.1.0::microbean-configuration::org.glassfish:javax.el:3.0.1-b08" });
+    Main.main(new String[] { "--defaultGroupId", "org.microbean", "--artifactPath", "microbean-configuration-cdi:0.1.0,microbean-configuration  ,   org.glassfish:javax.el:3.0.1-b08" });
     // There should be two instances created as a result of CDI
     // container initialization (in this project): one for the
     // "bootstrap" initializer, which figures out what the classpath
