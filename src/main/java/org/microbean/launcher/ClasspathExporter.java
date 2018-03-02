@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2017 MicroBean.
+ * Copyright © 2017-2018 microBean.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -148,7 +148,7 @@ public final class ClasspathExporter {
 
   /**
    * A <a
-   * href="http://docs.jboss.org/cdi/spec/2.0-PFD2/cdi-spec.html#producer_method"
+   * href="http://docs.jboss.org/cdi/spec/2.0/cdi-spec.html#producer_method"
    * target="_parent">producer method</a> that {@linkplain Produces
    * produces} an {@link ApplicationScoped application-scoped} {@link
    * List} of {@link Dependency} instances that represent Maven-style
@@ -486,7 +486,7 @@ public final class ClasspathExporter {
 
   /**
    * A <a
-   * href="http://docs.jboss.org/cdi/spec/2.0-PFD2/cdi-spec.html#producer_method"
+   * href="http://docs.jboss.org/cdi/spec/2.0/cdi-spec.html#producer_method"
    * target="_parent">producer method</a> that {@linkplain Produces
    * produces} an {@link Options} instance representing the command
    * line options that this class looks for in its {@link
